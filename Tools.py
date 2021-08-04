@@ -26,13 +26,23 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 
 def load_data():
+    # Loading rock_cropout
     rock_cropout = gpd.read_file("data/rockoutcrop/add_rockoutcrop_landsatWGS84.shp")
+    # Loading DEM elevation file, rescale and mean
     df = pd.read_csv("data/DEM/bamber.5km97.dat", sep=' ', header=None,
                      names=['latitude', 'longitude', 'difference', 'elevation'])
     df.loc[:, 'latitude'] = np.around(df.loc[:, 'latitude'], 0)
     df.loc[:, 'longitude'] = np.around(df.loc[:, 'longitude'], 0)
     mean_elev = df.groupby(['latitude', 'longitude']).elevation.mean().reset_index()
-    return rock_cropout, mean_elev
+    # Loading stations
+    stazioni = pd.read_csv('data/stazioni.csv', encoding='utf-8')
+    stazioni = gpd.GeoDataFrame(
+        stazioni, geometry=gpd.points_from_xy(stazioni.longitude, stazioni.latitude)).set_crs('epsg:4326')
+    # Loading geo_units and coastlines
+    geo_units = gpd.read_file('GeoUnits/shapefile/geo_units.shp')
+    coastline = gpd.read_file('coastline/add_coastline_medium_res_line_v7_4.shp')
+
+    return rock_cropout, mean_elev, stazioni, geo_units, coastline
 
 
 def find_nearest_value(origin_df, lon, lat, var_name):
