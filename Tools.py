@@ -6,28 +6,24 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.collections import PatchCollection
 from mpl_toolkits.basemap import Basemap
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import plotly.express as px
-import plotly.graph_objects as go
 
 import shapely
 import shapely.ops as ops
-from shapely.ops import nearest_points
-from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import MinMaxScaler
 from scipy.spatial import ConvexHull as ch
 from descartes import PolygonPatch
-import pyproj
-from functools import partial
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
 def load_data():
     # Loading rock_cropout
-    rock_cropout = gpd.read_file("data/rockoutcrop/add_rockoutcrop_landsatWGS84.shp")
+    rock_cropout = gpd.read_file("data/rockoutcrop/add_rockoutcrop_landsatWGS84.shp").to_crs('epsg:3031')
     # Loading DEM elevation file, rescale and mean
     df = pd.read_csv("data/DEM/bamber.5km97.dat", sep=' ', header=None,
                      names=['latitude', 'longitude', 'difference', 'elevation'])
@@ -37,7 +33,7 @@ def load_data():
     # Loading stations
     stazioni = pd.read_csv('data/stazioni.csv', encoding='utf-8')
     stazioni = gpd.GeoDataFrame(
-        stazioni, geometry=gpd.points_from_xy(stazioni.longitude, stazioni.latitude)).set_crs('epsg:4326')
+        stazioni, geometry=gpd.points_from_xy(stazioni.longitude, stazioni.latitude)).set_crs('epsg:4326').to_crs('epsg:3031')
     # Loading geo_units and coastlines
     geo_units = gpd.read_file('data/GeoUnits/shapefile/geo_units.shp')
     unconsolidated_classes = ['Hs', 'Qk', 'Quc', 'Qc', 'Qu', 'Qa', 'Qs']
@@ -63,7 +59,7 @@ def find_nearest_value(origin_df, lon, lat, var_name):
 
 
 def get_elevation(rock_cropout, mean_elev):
-    return pd.Series(rock_cropout.apply(lambda row: find_nearest_value(
+    return pd.Series(rock_cropout.to_crs("epsg:4326").apply(lambda row: find_nearest_value(
         mean_elev, row.geometry.centroid.x, row.geometry.centroid.y, 'elevation'), axis=1))
 
 
@@ -72,36 +68,81 @@ def get_basemap(projection='spstere', boundinglat=-60, lon_0=180, resolution='h'
     return m
 
 
-def get_basemap_projection(geometry, basemap=None):
+def get_basemap_projection_util(gdf, basemap=None):
     if not basemap:
         basemap = get_basemap()
-    if not geometry.crs:
+    if not gdf.crs:
         "CRS non definito"
         return None
-    geometry = geometry.to_crs("EPSG:3031")
-    centr_x = geometry.centroid.x
-    centr_y = geometry.centroid.y
+    if gdf.crs != 'epsg:3031':
+        gdf = gdf.to_crs("EPSG:3031")
+    centr_x = gdf.geometry.centroid.x
+    centr_y = gdf.geometry.centroid.y
     centroids = gpd.GeoDataFrame(geometry=gpd.points_from_xy(centr_x, centr_y)) \
         .set_crs('epsg:3031').to_crs('epsg:4326')
     points_x, points_y = basemap(centroids.geometry.x, centroids.geometry.y)
     return pd.DataFrame({'x': points_x, 'y': points_y})
 
 
-def viz_init():
+def get_basemap_projection(data, basemap=None):
+    if type(data) == list:
+        data_frames = []
+        for geom in data:
+            data_frames.append(get_basemap_projection_util(geom, basemap))
+        return data_frames
+    else:
+        return get_basemap_projection_util(data, basemap)
+
+
+
+def viz_init(axes=None):
     m = get_basemap()
-    plt.figure(figsize=(15, 15))
-    m.drawcoastlines()
-    m.fillcontinents(color='white', lake_color='aqua')
-    m.drawmapboundary(fill_color='lightblue')
+    if axes:
+        m.drawcoastlines(ax=axes)
+        m.fillcontinents(color='white', lake_color='aqua', ax=axes)
+        m.drawmapboundary(fill_color='lightblue', ax=axes)
+    else:
+        m.drawcoastlines()
+        m.fillcontinents(color='white', lake_color='aqua')
+        m.drawmapboundary(fill_color='lightblue')
     return m
 
 
+def visualize_exploratory_data(rock_cropout, viz_cropout, viz_stazioni, viz_rocks, viz_uncons):
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(30, 10))
+    fig.suptitle('Antartica rock cropout infos:', fontsize=24)
+    # First graph, cropout and area
+    basemap = viz_init(ax1)
+    plot = basemap.scatter(viz_cropout.x, viz_cropout.y, c=np.log(rock_cropout['geometry'].area),
+                           cmap=plt.cm.gnuplot2, zorder=3, s=0.1, ax=ax1)
+    add_colorbar(plot)
+    ax1.set_title('Area in km^2', fontsize=20)
+    # Second graph, cropout and elevation
+    basemap = viz_init(ax2)
+    plot = basemap.scatter(viz_cropout.x, viz_cropout.y, c=rock_cropout['elevation'], cmap=plt.cm.bwr, zorder=3, s=0.1,
+                           ax=ax2)
+    add_colorbar(plot)
+    basemap.scatter(viz_stazioni.x, viz_stazioni.y, c='black', zorder=3, s=50, ax=ax2)
+    ax2.set_title('DEM elevation model', fontsize=20)
+    # Third graph, rocks and unconsolidated material
+    basemap = viz_init(ax3)
+    plot = basemap.scatter(viz_rocks.x, viz_rocks.y, c='gray', zorder=3, s=0.1, ax=ax3, label="Rocks")
+    basemap.scatter(viz_uncons.x, viz_uncons.y, c='yellow', zorder=3, s=0.1, ax=ax3, label="Unconsolidated")
+    lgnd = ax3.legend(scatterpoints=1, fontsize=12)
+    lgnd.legendHandles[0]._sizes = [40]
+    lgnd.legendHandles[1]._sizes = [40]
+    ax3.set_title('Rocks / Unconsolidated distribution', fontsize=20)
+    plt.tight_layout(pad=3)
+    plt.show()
+
+
 def get_cluster_data(data):
-    data = data.to_crs("epsg:3031")
+    if data.crs != "epsg:3031":
+        data = data.to_crs("epsg:3031")
     cluster_data = pd.DataFrame({'lon': data.geometry.centroid.x,
                                  'lat': data.geometry.centroid.y,
                                  'area': data.geometry.area,
-                                 'elev': data.elevation})
+                                 'elevation': data.elevation})
     cluster_data = gpd.GeoDataFrame(
         cluster_data, geometry=gpd.points_from_xy(cluster_data.lon, cluster_data.lat)).set_crs('epsg:3031')
     cluster_data = cluster_data.drop(columns=['lon', 'lat'])
@@ -114,3 +155,127 @@ def scale_data(data):
     scaler = MinMaxScaler()
     data = data.drop(columns=['geometry'])
     return scaler.fit_transform(data)
+
+
+def add_colorbar(mappable):
+    last_axes = plt.gca()
+    ax = mappable.axes
+    fig = ax.figure
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    cbar = fig.colorbar(mappable, cax=cax)
+    plt.sca(last_axes)
+    return cbar
+
+
+def append_cluster(clusters, point, num_cluster):
+    for i in range(num_cluster):
+        if clusters.geometry[i].contains(point):
+            return i
+    return -1
+
+
+def get_elevation_range(rock_cropout, num_cluster):
+    elevation_range = []
+    for i in range(num_cluster):
+        temp = rock_cropout[rock_cropout.cluster == i]
+        elevation_range.append(np.max(temp.elevation) - np.min(temp.elevation))
+    return pd.Series(elevation_range)
+
+
+def get_clusters(num_cluster, rock_cropout, viz_cropout, viz_stazioni):
+    cluster_data = get_cluster_data(rock_cropout)
+    kmeans = KMeans(n_clusters=num_cluster, init="k-means++", n_init=10, tol=1e-04, random_state=42)
+    kmeans.fit(scale_data(cluster_data))
+
+    m = get_basemap()
+
+    cluster_data['label'] = kmeans.labels_
+    clusters = pd.DataFrame(columns=('cluster_num', 'geometry'))
+    for label in range(0, num_cluster):
+        arr = cluster_data[cluster_data.label == label][['x', 'y']].to_numpy()
+        hull = ch(arr)
+        polylist = []
+        for idx in hull.vertices:  # Indices of points forming the vertices of the convex hull.
+            polylist.append(arr[idx])  # Append this index point to list
+        p = Polygon(polylist)
+        clusters.at[label] = [label, p]
+    clusters = gpd.GeoDataFrame(clusters, crs='EPSG:{}'.format(3031), geometry='geometry')
+
+    viz_clusters_centroids = get_basemap_projection(clusters)
+
+    rock_cropout['cluster'] = rock_cropout.geometry.apply(lambda x: append_cluster(clusters, x.centroid, num_cluster))
+
+    patches = []
+    for poly in clusters.to_crs('epsg:4326').geometry:
+        if poly.geom_type == 'Polygon':
+            mpoly = shapely.ops.transform(m, poly)
+            patches.append(PolygonPatch(mpoly))
+        elif poly.geom_type == 'MultiPolygon':
+            for subpoly in poly:
+                mpoly = shapely.ops.transform(m, poly)
+                patches.append(PolygonPatch(mpoly))
+        else:
+            print(poly, 'is neither a polygon nor a multi-polygon. Skipping it')
+
+    clusters['elevation'] = rock_cropout.groupby('cluster').elevation.mean().reset_index().sort_values(by='cluster').iloc[
+                       1:].elevation.values
+    clusters['elevation_range'] = get_elevation_range(rock_cropout, num_cluster)
+    clusters['area_km2'] = clusters.geometry.apply(lambda x: np.around(x.area / 1e6, 1))
+
+    fig, ax1 = plt.subplots(figsize=(20, 20))
+    m.drawcoastlines()
+    m.fillcontinents(color='white', lake_color='aqua')
+    m.drawmapboundary(fill_color='lightblue')
+
+    m.scatter(viz_cropout.x, viz_cropout.y, c=kmeans.labels_, zorder=3, s=0.1)
+    p = PatchCollection(patches, cmap=matplotlib.cm.jet, match_original=True, zorder=4, alpha=0.5)
+    p.set_array(clusters.elevation)
+    ax1.add_collection(p)
+    plt.colorbar(p, pad=0.01, shrink=0.85, aspect=20)
+    m.scatter(viz_clusters_centroids.x, viz_clusters_centroids.y, marker='P', c='white', zorder=4, s=100)
+    m.scatter(viz_stazioni.x, viz_stazioni.y, marker='^', c='black', zorder=4, s=150)
+    plt.show()
+
+    return clusters
+
+
+def get_distance_from_coastline(stazioni, coastline):
+    distance_from_coastline = []
+    i = j = 0
+    fig, axs = plt.subplots(2, 6, figsize=(30, 10))
+    for point in range(len(stazioni)):
+        p1 = stazioni.iloc[point].geometry
+        p2 = coastline.iloc[np.argmin([stazioni.iloc[point].geometry.distance(line) for line in coastline.geometry])].geometry
+
+        coastline.plot(ax=axs[i, j])
+        axs[i, j].scatter(p1.x, p1.y, c='black', zorder=3, s=50)
+        axs[i, j].scatter(p2.centroid.x, p2.centroid.y, c='red', zorder=3, s=50)
+        distance = p1.distance(p2) / 1000
+        distance_from_coastline.append(np.around(distance, 2))
+        axs[i, j].text(-1200000, -275000, "km: " + str(np.around(distance, 2)), fontsize=18)
+        axs[i, j].axis('off')
+        x = [p1.x, p2.centroid.x]
+        y = [p1.y, p2.centroid.y]
+        axs[i, j].plot(x, y, '--', markersize=2, linewidth=1, color='gray')
+
+        j += 1
+        if j % 6 == 0:
+            i += 1
+            j = 0
+
+    plt.tight_layout()
+    plt.show()
+    return distance_from_coastline
+
+
+def get_total_cropout_area_under_radius(point, target, radius):
+    if target.crs is not None:
+        if target.crs != 'epsg:3031':
+            target = target.to_crs('epsg:3031')
+        arr = [point.distance(geom) / 1000 for geom in target]
+        idx = [idx for idx in range(len(arr)) if arr[idx] < radius]
+        return np.around(target.iloc[idx].geometry.area.values.sum()/1e6, 2)
+    else:
+        print('Target without crs infos')
+        return None
