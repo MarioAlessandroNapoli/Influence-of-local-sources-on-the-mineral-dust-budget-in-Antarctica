@@ -2,3 +2,5 @@ data/
 .idea
 .ipynb_checkpoints
 __pycache__/
+profiling.prof
+2_Potenziale_erosion_eolica_AWS.pdf
