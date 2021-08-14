@@ -274,32 +274,29 @@ def get_clusters(num_cluster, rock_cropout, viz_cropout, viz_stazioni, cluster_d
     return clusters
 
 
-def get_distance_from_coastline(stazioni, coastline):
+def get_distance_from_coastline(stazioni, coastline, show=True):
     distance_from_coastline = []
+
     i = j = 0
-    fig, axs = plt.subplots(2, 6, figsize=(30, 10))
+    fig, axs = plt.subplots(figsize=(8, 8))
+    coastline.plot(ax=axs)
     for point in range(len(stazioni)):
         p1 = stazioni.iloc[point].geometry
         p2 = coastline.iloc[np.argmin([stazioni.iloc[point].geometry.distance(line) for line in coastline.geometry])].geometry
-
-        coastline.plot(ax=axs[i, j])
-        axs[i, j].scatter(p1.x, p1.y, c='black', zorder=3, s=50)
-        axs[i, j].scatter(p2.centroid.x, p2.centroid.y, c='red', zorder=3, s=50)
         distance = p1.distance(p2) / 1000
         distance_from_coastline.append(np.around(distance, 2))
-        axs[i, j].text(-1200000, -275000, "km: " + str(np.around(distance, 2)), fontsize=18)
-        axs[i, j].axis('off')
-        x = [p1.x, p2.centroid.x]
-        y = [p1.y, p2.centroid.y]
-        axs[i, j].plot(x, y, '--', markersize=2, linewidth=1, color='gray')
-
-        j += 1
-        if j % 6 == 0:
-            i += 1
-            j = 0
-
-    plt.tight_layout()
-    plt.show()
+        if show:
+            axs.scatter(p1.x, p1.y, c='black', zorder=3, s=50)
+            axs.scatter(p2.centroid.x, p2.centroid.y, c='red', zorder=3, s=50)
+            #axs.text(-1200000, -275000, "km: " + str(np.around(distance, 2)), fontsize=18)
+            axs.axis('off')
+            x = [p1.x, p2.centroid.x]
+            y = [p1.y, p2.centroid.y]
+            axs.plot(x, y, '--', markersize=2, linewidth=1, color='gray')
+    if show:
+        plt.title('Distance from coastline')
+        plt.tight_layout()
+        plt.show()
     return distance_from_coastline
 
 
