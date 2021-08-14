@@ -18,17 +18,49 @@ from sklearn.preprocessing import MinMaxScaler
 from scipy.spatial import ConvexHull as ch
 from descartes import PolygonPatch
 
+import rasterio
 pd.options.mode.chained_assignment = None  # default='warn'
 
+
+
+
+def get_elevation_data():
+    img = rasterio.open(r'data/DEM/1km.tif')
+    layer = img.read(1)
+    xs = []
+    ys = []
+    values = []
+
+    resolution = 5
+    lower = int(np.floor(resolution / 2))
+    upper = int(np.ceil(resolution / 2))
+
+    for i in range(resolution, 5601, resolution):
+        for j in range(resolution, 5601, resolution):
+            values.append(layer[(i - lower):(i + upper), (j - lower):(j + upper)].mean())
+            y, x = img.transform * (i, j)
+            xs.append(-x)
+            ys.append(-y)
+
+    elevation = gpd.GeoDataFrame({'elevation': values}, geometry=gpd.points_from_xy(xs, ys)).set_crs(
+        'epsg:3031').to_crs('epsg:4326')
+    elevation['longitude'] = elevation.geometry.x
+    elevation['latitude'] = elevation.geometry.y
+    # viz_elevation = get_basemap_projection(elevation)
+    # fig, ax = plt.subplots(figsize=(12,12))
+    # basemap = viz_init(ax)
+    # ax.scatter(viz_elevation.x, viz_elevation.y, c=elevation['elevation'], cmap=plt.cm.gnuplot2, zorder=3, s=3)
+    return elevation
 
 def load_data():
     # Loading rock_cropout
     rock_cropout = gpd.read_file("data/rockoutcrop/add_rockoutcrop_landsatWGS84.shp").to_crs('epsg:3031')
     # Loading DEM elevation file, rescale and mean
-    df = pd.read_csv("data/DEM/bamber.5km97.dat", sep=' ', header=None,
-                     names=['latitude', 'longitude', 'difference', 'elevation'])
-    df.loc[:, 'latitude'] = np.around(df.loc[:, 'latitude'], 0)
-    df.loc[:, 'longitude'] = np.around(df.loc[:, 'longitude'], 0)
+    #df = pd.read_csv("data/DEM/bamber.5km97.dat", sep=' ', header=None,
+    #                 names=['latitude', 'longitude', 'elevation', 'difference'])
+    df = get_elevation_data()
+    df.loc[:, 'latitude'] = np.int32(df.loc[:, 'latitude'])
+    df.loc[:, 'longitude'] = np.int32(df.loc[:, 'longitude'])
     mean_elev = df.groupby(['latitude', 'longitude']).elevation.mean().reset_index()
     # Loading stations
     stazioni = pd.read_csv('data/stazioni.csv', encoding='utf-8')
@@ -116,11 +148,11 @@ def visualize_exploratory_data(rock_cropout, viz_cropout, viz_stazioni, viz_rock
     plot = basemap.scatter(viz_cropout.x, viz_cropout.y, c=np.log(rock_cropout['geometry'].area),
                            cmap=plt.cm.gnuplot2, zorder=3, s=0.1, ax=ax1)
     add_colorbar(plot)
-    ax1.set_title('Area in km^2', fontsize=20)
+    ax1.set_title('Log area in m^2', fontsize=20)
     # Second graph, cropout and elevation
     basemap = viz_init(ax2)
-    plot = basemap.scatter(viz_cropout.x, viz_cropout.y, c=rock_cropout['elevation'], cmap=plt.cm.bwr, zorder=3, s=0.1,
-                           ax=ax2)
+    plot = basemap.scatter(
+        viz_cropout.x, viz_cropout.y, c=rock_cropout['elevation'], cmap=plt.cm.gnuplot2, zorder=3, s=0.1, ax=ax2)
     add_colorbar(plot)
     basemap.scatter(viz_stazioni.x, viz_stazioni.y, c='black', zorder=3, s=50, ax=ax2)
     ax2.set_title('DEM elevation model', fontsize=20)
@@ -141,13 +173,15 @@ def get_cluster_data(data):
         data = data.to_crs("epsg:3031")
     cluster_data = pd.DataFrame({'lon': data.geometry.centroid.x,
                                  'lat': data.geometry.centroid.y,
-                                 'area': data.geometry.area,
+                                 #'area': data.geometry.area,
                                  'elevation': data.elevation})
     cluster_data = gpd.GeoDataFrame(
         cluster_data, geometry=gpd.points_from_xy(cluster_data.lon, cluster_data.lat)).set_crs('epsg:3031')
     cluster_data = cluster_data.drop(columns=['lon', 'lat'])
     cluster_data['x'] = cluster_data.geometry.apply(lambda point: point.x)
     cluster_data['y'] = cluster_data.geometry.apply(lambda point: point.y)
+    #cluster_data = cluster_data[~cluster_data.elevation.isna()]
+    cluster_data['elevation'] = cluster_data['elevation'].fillna(cluster_data['elevation'].mean())
     return cluster_data
 
 
@@ -183,8 +217,9 @@ def get_elevation_range(rock_cropout, num_cluster):
     return pd.Series(elevation_range)
 
 
-def get_clusters(num_cluster, rock_cropout, viz_cropout, viz_stazioni):
-    cluster_data = get_cluster_data(rock_cropout)
+def get_clusters(num_cluster, rock_cropout, viz_cropout, viz_stazioni, cluster_data):
+    #if not cluster_data:
+    #    cluster_data = get_cluster_data(rock_cropout)
     kmeans = KMeans(n_clusters=num_cluster, init="k-means++", n_init=10, tol=1e-04, random_state=42)
     kmeans.fit(scale_data(cluster_data))
 
@@ -204,7 +239,8 @@ def get_clusters(num_cluster, rock_cropout, viz_cropout, viz_stazioni):
 
     viz_clusters_centroids = get_basemap_projection(clusters)
 
-    rock_cropout['cluster'] = rock_cropout.geometry.apply(lambda x: append_cluster(clusters, x.centroid, num_cluster))
+    rock_cropout['cluster'] = kmeans.labels_
+    #rock_cropout['cluster'] = rock_cropout.geometry.apply(lambda x: append_cluster(clusters, x.centroid, num_cluster))
 
     patches = []
     for poly in clusters.to_crs('epsg:4326').geometry:
@@ -218,8 +254,7 @@ def get_clusters(num_cluster, rock_cropout, viz_cropout, viz_stazioni):
         else:
             print(poly, 'is neither a polygon nor a multi-polygon. Skipping it')
 
-    clusters['elevation'] = rock_cropout.groupby('cluster').elevation.mean().reset_index().sort_values(by='cluster').iloc[
-                       1:].elevation.values
+    clusters['elevation'] = rock_cropout.groupby('cluster').elevation.mean().reset_index().sort_values(by='cluster').iloc[:].elevation.values
     clusters['elevation_range'] = get_elevation_range(rock_cropout, num_cluster)
     clusters['area_km2'] = clusters.geometry.apply(lambda x: np.around(x.area / 1e6, 1))
 
@@ -236,7 +271,6 @@ def get_clusters(num_cluster, rock_cropout, viz_cropout, viz_stazioni):
     m.scatter(viz_clusters_centroids.x, viz_clusters_centroids.y, marker='P', c='white', zorder=4, s=100)
     m.scatter(viz_stazioni.x, viz_stazioni.y, marker='^', c='black', zorder=4, s=150)
     plt.show()
-
     return clusters
 
 
