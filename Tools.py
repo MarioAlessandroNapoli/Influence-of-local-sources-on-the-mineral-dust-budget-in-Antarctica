@@ -218,14 +218,16 @@ def get_elevation_range(rock_cropout, num_cluster):
 
 
 def get_clusters(num_cluster, rock_cropout, viz_cropout, viz_stazioni, cluster_data):
+    from sklearn.cluster import DBSCAN
     #if not cluster_data:
     #    cluster_data = get_cluster_data(rock_cropout)
-    kmeans = KMeans(n_clusters=num_cluster, init="k-means++", n_init=10, tol=1e-04, random_state=42)
-    kmeans.fit(scale_data(cluster_data))
+    clust = KMeans(n_clusters=num_cluster, init="k-means++", n_init=10, tol=1e-04, random_state=42)
+    clust.fit(scale_data(cluster_data))
+    cluster_data['label'] = clust.labels_
+
 
     m = get_basemap()
 
-    cluster_data['label'] = kmeans.labels_
     clusters = pd.DataFrame(columns=('cluster_num', 'geometry'))
     for label in range(0, num_cluster):
         arr = cluster_data[cluster_data.label == label][['x', 'y']].to_numpy()
@@ -239,7 +241,7 @@ def get_clusters(num_cluster, rock_cropout, viz_cropout, viz_stazioni, cluster_d
 
     viz_clusters_centroids = get_basemap_projection(clusters)
 
-    rock_cropout['cluster'] = kmeans.labels_
+    rock_cropout['cluster'] = clust.labels_
     #rock_cropout['cluster'] = rock_cropout.geometry.apply(lambda x: append_cluster(clusters, x.centroid, num_cluster))
 
     patches = []
@@ -263,7 +265,7 @@ def get_clusters(num_cluster, rock_cropout, viz_cropout, viz_stazioni, cluster_d
     m.fillcontinents(color='white', lake_color='aqua')
     m.drawmapboundary(fill_color='lightblue')
 
-    m.scatter(viz_cropout.x, viz_cropout.y, c=kmeans.labels_, zorder=3, s=0.1)
+    m.scatter(viz_cropout.x, viz_cropout.y, c=clust.labels_, zorder=3, s=0.1)
     p = PatchCollection(patches, cmap=matplotlib.cm.jet, match_original=True, zorder=4, alpha=0.5)
     p.set_array(clusters.elevation)
     ax1.add_collection(p)
