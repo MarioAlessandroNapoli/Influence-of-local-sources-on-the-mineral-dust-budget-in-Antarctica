@@ -1,6 +1,14 @@
-data/
 .idea
 .ipynb_checkpoints
 __pycache__/
-profiling.prof
-2_Potenziale_erosion_eolica_AWS.pdf
+TESI_ENV
+Exploration.ipynb
+data/Altro
+data/step_1_data_input/coastline
+data/step_1_data_input/DEM
+data/step_1_data_input/GeoUnits
+data/step_1_data_input/rockoutcrop
+data/step_1_data_input/*.csv
+data/step_2_data_input/AustraliaAWS
+data/step_2_data_input/clima
+data/step_1_data_output/*.csv
