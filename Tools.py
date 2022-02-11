@@ -1,6 +1,12 @@
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import os
+
+import shapely.wkt as poly_parse
+from glob import glob
+from datetime import timedelta
+from tqdm.auto import tqdm
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -11,6 +17,7 @@ import plotly.express as px
 
 import shapely
 import shapely.ops as ops
+import shapely.wkt as poly_parse
 from shapely.geometry.polygon import Polygon
 
 from sklearn.cluster import KMeans
@@ -21,26 +28,30 @@ from descartes import PolygonPatch
 import rasterio
 pd.options.mode.chained_assignment = None  # default='warn'
 
+from scipy.interpolate import griddata
+
 
 
 
 def get_elevation_data():
-    img = rasterio.open(r'data/DEM/1km.tif')
+    img = rasterio.open(f'data{os.sep}step_1_data{os.sep}DEM{os.sep}1km.tif')
     layer = img.read(1)
     xs = []
     ys = []
     values = []
-
-    resolution = 5
+    layer[layer == -999.0] = np.nan
+    resolution = 3
     lower = int(np.floor(resolution / 2))
     upper = int(np.ceil(resolution / 2))
 
     for i in range(resolution, 5601, resolution):
         for j in range(resolution, 5601, resolution):
-            values.append(layer[(i - lower):(i + upper), (j - lower):(j + upper)].mean())
-            y, x = img.transform * (i, j)
-            xs.append(-x)
-            ys.append(-y)
+            value = layer[(i - lower):(i + upper), (j - lower):(j + upper)].mean()
+            if not np.isnan(value):
+                values.append(value)
+                y, x = img.transform * (i, j)
+                xs.append(-x)
+                ys.append(-y)
 
     elevation = gpd.GeoDataFrame({'elevation': values}, geometry=gpd.points_from_xy(xs, ys)).set_crs(
         'epsg:3031').to_crs('epsg:4326')
@@ -54,20 +65,22 @@ def get_elevation_data():
 
 def load_data():
     # Loading rock_cropout
-    rock_cropout = gpd.read_file("data/rockoutcrop/add_rockoutcrop_landsatWGS84.shp").to_crs('epsg:3031')
+    rock_cropout = gpd.read_file(f"data{os.sep}step_1_data{os.sep}rockoutcrop{os.sep}add_rockoutcrop_landsatWGS84.shp").to_crs('epsg:3031')
     # Loading DEM elevation file, rescale and mean
     #df = pd.read_csv("data/DEM/bamber.5km97.dat", sep=' ', header=None,
     #                 names=['latitude', 'longitude', 'elevation', 'difference'])
     df = get_elevation_data()
-    df.loc[:, 'latitude'] = np.int32(df.loc[:, 'latitude'])
-    df.loc[:, 'longitude'] = np.int32(df.loc[:, 'longitude'])
+
+    df.loc[:, 'latitude'] = np.around(df.loc[:, 'latitude'], 1)
+    df.loc[:, 'longitude'] = np.around(df.loc[:, 'longitude'], 1)
+
     mean_elev = df.groupby(['latitude', 'longitude']).elevation.mean().reset_index()
     # Loading stations
-    stazioni = pd.read_csv('data/stazioni.csv', encoding='utf-8')
+    stazioni = pd.read_csv(f'data{os.sep}step_1_data{os.sep}stazioni.csv', encoding='utf-8')
     stazioni = gpd.GeoDataFrame(
         stazioni, geometry=gpd.points_from_xy(stazioni.longitude, stazioni.latitude)).set_crs('epsg:4326').to_crs('epsg:3031')
     # Loading geo_units and coastlines
-    geo_units = gpd.read_file('data/GeoUnits/shapefile/geo_units.shp')
+    geo_units = gpd.read_file(f'data{os.sep}step_1_data{os.sep}GeoUnits{os.sep}shapefile{os.sep}geo_units.shp')
     unconsolidated_classes = ['Hs', 'Qk', 'Quc', 'Qc', 'Qu', 'Qa', 'Qs']
     topography_classes = ['w', 'water', 'ice', '?', 'unknown']
 
@@ -77,7 +90,7 @@ def load_data():
 
     del geo_units
 
-    coastline = gpd.read_file('data/coastline/add_coastline_medium_res_line_v7_4.shp')
+    coastline = gpd.read_file(f'data{os.sep}step_1_data{os.sep}coastline{os.sep}add_coastline_medium_res_line_v7_4.shp')
 
     return rock_cropout, mean_elev, stazioni, unconsolidated, rocks, coastline
 
@@ -86,7 +99,7 @@ def find_nearest_value(origin_df, lon, lat, var_name):
     try:
         return origin_df[(origin_df.longitude == int(lon)) & (origin_df.latitude == int(lat))][var_name].values[0]
     except Exception as ex:
-        print('Cannot find nearest value, error: ', ex)
+        # print('Cannot find nearest value, error: ', ex)
         return None
 
 
@@ -127,8 +140,8 @@ def get_basemap_projection(data, basemap=None):
 
 
 
-def viz_init(axes=None):
-    m = get_basemap()
+def viz_init(axes=None, projection='spstere', boundinglat=-60, lon_0=180, resolution='h'):
+    m = get_basemap(projection=projection, boundinglat=boundinglat, lon_0=lon_0, resolution=resolution)
     if axes:
         m.drawcoastlines(ax=axes)
         m.fillcontinents(color='white', lake_color='aqua', ax=axes)
@@ -271,9 +284,9 @@ def get_clusters(num_cluster, rock_cropout, viz_cropout, viz_stazioni, cluster_d
     ax1.add_collection(p)
     plt.colorbar(p, pad=0.01, shrink=0.85, aspect=20)
     m.scatter(viz_clusters_centroids.x, viz_clusters_centroids.y, marker='P', c='white', zorder=4, s=100)
-    m.scatter(viz_stazioni.x, viz_stazioni.y, marker='^', c='black', zorder=4, s=150)
-    plt.show()
-    return clusters
+    # m.scatter(viz_stazioni.x, viz_stazioni.y, marker='^', c='black', zorder=4, s=150)
+    # plt.savefig(f"cluster_{num_cluster}.jpg", dpi=300)
+    return clusters, clust, plt
 
 
 def get_distance_from_coastline(stazioni, coastline, show=True):
@@ -312,3 +325,53 @@ def get_total_cropout_area_under_radius(point, target, radius):
     else:
         print('Target without crs infos')
         return None
+
+
+    
+def plot_patches_and_var(df, scatter=None, scatter_label_col='label', patches_col_var=None):
+    m = get_basemap()
+    patches = []
+    for poly in df.to_crs('epsg:4326').geometry:
+        if poly.geom_type == 'Polygon':
+            mpoly = shapely.ops.transform(m, poly)
+            patches.append(PolygonPatch(mpoly))
+        elif poly.geom_type == 'MultiPolygon':
+            for subpoly in poly:
+                mpoly = shapely.ops.transform(m, poly)
+                patches.append(PolygonPatch(mpoly))
+        else:
+            print(poly, 'is neither a polygon nor a multi-polygon. Skipping it')
+
+    fig, ax1 = plt.subplots(figsize=(15, 15))
+    m.drawcoastlines()
+    m.fillcontinents(color='white', lake_color='aqua')
+    m.drawmapboundary(fill_color='lightblue')
+
+    if scatter is not None:
+        m.scatter(scatter.x, scatter.y, c=scatter_label_col, zorder=3, s=0.1)
+    
+    p = PatchCollection(patches, cmap=matplotlib.cm.jet, match_original=True, zorder=4, alpha=0.5)
+    if patches_col_var is not None:
+        p.set_array(df[patches_col_var].values)
+    ax1.add_collection(p)
+    plt.colorbar(p, pad=0.01, shrink=0.85, aspect=20)
+    plt.show()
+
+def csv_to_gpd(df_name, geom_col='geometry', crs='4326'):
+    df = pd.read_csv(f"{df_name}.csv")
+    df.geometry = df.geometry.apply(lambda x: poly_parse.loads(x))
+    df = gpd.GeoDataFrame(df, geometry=geom_col, crs=f"EPSG:{crs}")
+    return df
+
+def load_data_from_files(root_path=None):
+    if root_path == None:
+        root_path = f"data{os.sep}step_1_data_output{os.sep}"
+    rock_cropout = csv_to_gpd(f"{root_path}rock_cropout", crs='3031')
+    mean_elev = pd.read_csv(f"{root_path}mean_elev.csv")
+    unconsolidated = csv_to_gpd(f"{root_path}unconsolidated")
+    rocks = csv_to_gpd(f"{root_path}rocks")
+    coastline = csv_to_gpd(f"{root_path}coastline", crs='3031')
+    cluster_data = csv_to_gpd(f"{root_path}cluster_data", crs='3031')
+    stazioni = csv_to_gpd(f"{root_path}stazioni_enriched", crs='3031')
+    clusters = csv_to_gpd(f"{root_path}clusters", crs='3031')
+    return rock_cropout, mean_elev, stazioni, unconsolidated, rocks, coastline, clusters, cluster_data
