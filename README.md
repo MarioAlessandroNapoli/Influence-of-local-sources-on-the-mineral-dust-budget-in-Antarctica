@@ -2,8 +2,6 @@
 Needed data can be found here:
 https://drive.google.com/drive/folders/1BsmqEwzjdKfLA-8_PhSMPqQfkpNcMI5l?usp=sharing
 
-to execute the code of the first step put theese files inside: data/step_1_data_input
-
 To get started:
 ```
 git clone https://github.com/MarioAlessandroNapoli/Tesi.git
