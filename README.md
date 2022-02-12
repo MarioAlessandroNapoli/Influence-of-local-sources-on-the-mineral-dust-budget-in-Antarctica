@@ -13,6 +13,7 @@ conda activate tesi_env
 conda install -c conda-forge gdal
 conda install geopandas
 conda install -c conda-forge rasterio
+conda install ipywidgets
 pip install -r requirements.txt
 python -m ipykernel install --user --name tesi_env
 ```
