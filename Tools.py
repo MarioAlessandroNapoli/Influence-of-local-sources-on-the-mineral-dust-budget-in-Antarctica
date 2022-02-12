@@ -34,7 +34,7 @@ from scipy.interpolate import griddata
 
 
 def get_elevation_data():
-    img = rasterio.open(f'data{os.sep}step_1_data{os.sep}DEM{os.sep}1km.tif')
+    img = rasterio.open(f'data{os.sep}step_1_data_input{os.sep}DEM{os.sep}1km.tif')
     layer = img.read(1)
     xs = []
     ys = []
@@ -65,7 +65,7 @@ def get_elevation_data():
 
 def load_data():
     # Loading rock_cropout
-    rock_cropout = gpd.read_file(f"data{os.sep}step_1_data{os.sep}rockoutcrop{os.sep}add_rockoutcrop_landsatWGS84.shp").to_crs('epsg:3031')
+    rock_cropout = gpd.read_file(f"data{os.sep}step_1_data_input{os.sep}rockoutcrop{os.sep}add_rockoutcrop_landsatWGS84.shp").to_crs('epsg:3031')
     # Loading DEM elevation file, rescale and mean
     #df = pd.read_csv("data/DEM/bamber.5km97.dat", sep=' ', header=None,
     #                 names=['latitude', 'longitude', 'elevation', 'difference'])
@@ -76,11 +76,11 @@ def load_data():
 
     mean_elev = df.groupby(['latitude', 'longitude']).elevation.mean().reset_index()
     # Loading stations
-    stazioni = pd.read_csv(f'data{os.sep}step_1_data{os.sep}stazioni.csv', encoding='utf-8')
+    stazioni = pd.read_csv(f'data{os.sep}step_1_data_input{os.sep}stazioni.csv', encoding='utf-8')
     stazioni = gpd.GeoDataFrame(
         stazioni, geometry=gpd.points_from_xy(stazioni.longitude, stazioni.latitude)).set_crs('epsg:4326').to_crs('epsg:3031')
     # Loading geo_units and coastlines
-    geo_units = gpd.read_file(f'data{os.sep}step_1_data{os.sep}GeoUnits{os.sep}shapefile{os.sep}geo_units.shp')
+    geo_units = gpd.read_file(f'data{os.sep}step_1_data_input{os.sep}GeoUnits{os.sep}shapefile{os.sep}geo_units.shp')
     unconsolidated_classes = ['Hs', 'Qk', 'Quc', 'Qc', 'Qu', 'Qa', 'Qs']
     topography_classes = ['w', 'water', 'ice', '?', 'unknown']
 
@@ -90,7 +90,7 @@ def load_data():
 
     del geo_units
 
-    coastline = gpd.read_file(f'data{os.sep}step_1_data{os.sep}coastline{os.sep}add_coastline_medium_res_line_v7_4.shp')
+    coastline = gpd.read_file(f'data{os.sep}step_1_data_input{os.sep}coastline{os.sep}add_coastline_medium_res_line_v7_4.shp')
 
     return rock_cropout, mean_elev, stazioni, unconsolidated, rocks, coastline
 
