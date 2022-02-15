@@ -12,4 +12,6 @@ data/step_1_data_input/*.csv
 data/step_2_data_input/AustraliaAWS
 data/step_2_data_input/clima
 data/step_1_data_output/*.csv
+data/step_3_data_input/gdas1
+data/step_3_data_output/traj
 PoC_Tesi.py

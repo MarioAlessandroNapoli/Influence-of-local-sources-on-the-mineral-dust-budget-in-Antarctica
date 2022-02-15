@@ -9,6 +9,7 @@ cd Tesi
 conda create --name tesi_env
 conda activate tesi_env
 conda install -c conda-forge gdal
+conda install -c conda-forge cartopy
 conda install geopandas
 conda install -c conda-forge rasterio
 conda install ipywidgets
