@@ -10,7 +10,7 @@ conda create --name tesi_env
 conda activate tesi_env
 conda install -c conda-forge gdal
 conda install -c conda-forge cartopy
-conda install geopandas
+conda install --channel conda-forge geopandas
 conda install -c conda-forge rasterio
 conda install ipywidgets
 pip install -r requirements.txt
