@@ -2,6 +2,7 @@ tqdm
 basemap
 basemap-data-hires
 plotly
+plotly-express
 descartes
 ipykernel
 IProgress

@@ -348,7 +348,7 @@ def plot_patches_and_var(df, scatter=None, scatter_label_col='label', patches_co
     m.drawmapboundary(fill_color='lightblue')
 
     if scatter is not None:
-        m.scatter(scatter.x, scatter.y, c=scatter_label_col, zorder=3, s=0.1)
+        m.scatter(scatter.x, scatter.y, c=scatter_label_col, zorder=3, s=5)
     
     p = PatchCollection(patches, cmap=matplotlib.cm.jet, match_original=True, zorder=4, alpha=0.5)
     if patches_col_var is not None:
@@ -356,6 +356,7 @@ def plot_patches_and_var(df, scatter=None, scatter_label_col='label', patches_co
     ax1.add_collection(p)
     plt.colorbar(p, pad=0.01, shrink=0.85, aspect=20)
     plt.show()
+    return fig, ax1
 
 def csv_to_gpd(df_name, geom_col='geometry', crs='4326'):
     df = pd.read_csv(f"{df_name}.csv")
