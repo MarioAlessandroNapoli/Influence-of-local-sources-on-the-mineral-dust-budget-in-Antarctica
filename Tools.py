@@ -14,6 +14,7 @@ from matplotlib.collections import PatchCollection
 from mpl_toolkits.basemap import Basemap
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import plotly.express as px
+import plotly.graph_objects as go
 
 import shapely
 import shapely.ops as ops
@@ -328,7 +329,7 @@ def get_total_cropout_area_under_radius(point, target, radius):
 
 
     
-def plot_patches_and_var(df, scatter=None, scatter_label_col='label', patches_col_var=None):
+def plot_patches_and_var(df, scatter=None, scatter_label_col='label', patches_col_var=None, show=True):
     m = get_basemap()
     patches = []
     for poly in df.to_crs('epsg:4326').geometry:
@@ -355,7 +356,8 @@ def plot_patches_and_var(df, scatter=None, scatter_label_col='label', patches_co
         p.set_array(df[patches_col_var].values)
     ax1.add_collection(p)
     plt.colorbar(p, pad=0.01, shrink=0.85, aspect=20)
-    plt.show()
+    if show:
+        plt.show()
     return fig, ax1
 
 def csv_to_gpd(df_name, geom_col='geometry', crs='4326'):
