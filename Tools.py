@@ -6,7 +6,7 @@ import os
 import shapely.wkt as poly_parse
 from glob import glob
 from datetime import timedelta
-from tqdm.auto import tqdm
+from tqdm.notebook import tqdm
 
 import matplotlib
 import matplotlib.pyplot as plt
