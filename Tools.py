@@ -349,7 +349,8 @@ def plot_patches_and_var(df, scatter=None, scatter_label_col='label', patches_co
     m.drawmapboundary(fill_color='lightblue')
 
     if scatter is not None:
-        m.scatter(scatter.x, scatter.y, c=scatter_label_col, zorder=3, s=5)
+        scatter_x, scatter_y = m(scatter.x, scatter.y)
+        m.scatter(scatter_x, scatter_y, c=scatter_label_col, zorder=3, s=5)
     
     p = PatchCollection(patches, cmap=matplotlib.cm.jet, match_original=True, zorder=4, alpha=0.5)
     if patches_col_var is not None:
